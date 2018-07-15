@@ -1,0 +1,626 @@
+# Lexathon in MIPS
+# main.asm
+
+# let's do this
+
+# data part. This is where we store all messages output to the screen.
+
+.data 
+
+
+# strings for main
+greeting1: .asciiz "------------------------------------------Welcome to Lexathon in MIPS.-------------------------------------------------\n"
+greeting2: .asciiz "          		           This game's object is to find as many words as possible\n"
+greeting3: .asciiz "                               from a  3 x 3 matrix of letters in an alotted amount of time.\n\n\n"
+greeting4: .asciiz "The rules are as follows:     \n\n\n"
+greeting5: .asciiz "Valid words must always be at least four letters long.\n\n"
+greeting6: .asciiz "For each 3 x 3 matrix of letters, there will always be at least one nine-letter word.\n\n"
+greeting7: .asciiz "You will start the game with 60 seconds. For each correct word you guess, 5 seconds will be awarded.\n\n"
+greeting8: .asciiz "For each correct word you guess, you will be awarded one point.\n\n" 
+greeting9: .asciiz "The game ends when time reaches zero OR you correctly guess all possible words for the matrix.\n\n"
+greeting10: .asciiz "Type words into the text box in ALL CAPS and press enter. \n\nDo not type spaces. Words in lowercase will be counted as invalid.\n\n"
+startLexathon: .asciiz "\n\nEnter '1' to begin game or '0' to exit.    "
+invalidInput: .asciiz "Invalid entry. \n\n"
+
+endGame1:		.asciiz "\n\n###################################################################\n"
+endGame2:		.asciiz "###############     Program ending...   ###############\n"
+endGame3:		.asciiz "###################################################################\n"
+
+
+
+#----------------------------------------------------------------
+# strings for GameStarts
+loadingMessage:	.asciiz "Game loading...............\n\n"
+fileName:	.asciiz " .txt"
+fileBuffer:     .space 700000	# max number of characters to read from a file, entire file stored here
+legalWords:     .space 700000	# place in which to store the legal words for the current game
+errorString: 	.asciiz "Error opening file. Program terminated.\n"
+endOfFileErrorString: .asciiz "index out of bounds"
+
+
+
+
+# strings for printing grid
+grid1.1: 	.asciiz "|+- -+|"
+grid1.2: 	.asciiz "|+- -+|"
+grid1.3: 	.asciiz "|+- -+|"
+grid2.1: 	.asciiz "\n|+- -+|"
+grid2.2: 	.asciiz "|+- -+|"
+grid2.3: 	.asciiz "|+- -+|"
+grid3.1: 	.asciiz "\n|+- -+|"
+grid3.2: 	.asciiz "|+- -+|"
+grid3.3: 	.asciiz "|+- -+|\n\n"
+
+
+
+#----------------------------------------------------------------------------
+# strings for validation
+
+wordEntered: .space 12 		# space to store all words entered by the user
+promptString:   .asciiz "\n\nEnter a word, or enter '0' to end game:    \n\n"
+invalidWord: .asciiz "Invalid word! Try again.    \n\n"
+validWord: .asciiz "Nice! 1 point awarded.        \n\n"
+zeroExitString: .asciiz "0"
+pointsEarned: .asciiz "\n Points earned: "
+timeIsUp: .asciiz "Your time has run out!"
+countdownDisplay: "Your remaining time in seconds is:"
+correctArray: .space 100	#space to store all correct words guessed by user
+allPossibleWords: .asciiz "\n\nAll possible words:  \n\n"
+allCorrectWords: .asciiz "\n\nAll correct words that you entered:  \n\n"
+youEnteredADuplicateWord: .asciiz "\n\n Duplicate word not allowed, no points added.\n\n"
+
+
+
+#-----------------------------------------------------------------------------
+
+
+.text
+#.globl main
+
+main:
+	# print welcome messages
+	li $v0, 4
+	la $a0, greeting1
+	syscall	
+	la $a0, greeting2
+	syscall	
+	la $a0, greeting3
+	syscall
+	la $a0, greeting4
+	syscall
+	la $a0, greeting5
+	syscall
+	la $a0, greeting6
+	syscall
+	la $a0, greeting7
+	syscall
+	la $a0, greeting8
+	syscall
+	la $a0, greeting9
+	syscall
+	la $a0, greeting10
+	syscall
+	
+	
+askForGame: 			  # ask the user if they want to begin the game
+	
+	la $a0, startLexathon			
+	syscall
+
+	li $v0, 5		  # read an int from the user	
+	syscall
+	
+	beq $v0, $zero, exit      # if the user enters 0, exit the program
+	bne $v0, 1, invalidEntry  # if the code reaches this point, the input integer is either 1 or invalid.
+	
+	j startGame	          # the user entered 1; jump to startGame.
+	
+	
+# print the ending game messages and ask for another game
+endGame: 
+	li $v0, 4
+
+
+	la $a0, endGame1
+	syscall
+	
+	la $a0, endGame2
+	syscall
+	
+	la $a0, endGame3
+	syscall
+	
+	j askForGame		# jump to askForGame
+
+
+exit: 
+
+	li $v0, 10		# exit the program
+	syscall
+
+# print an invalid entry message and ask for another game
+invalidEntry:
+
+	li $v0, 4
+	la $a0, invalidInput
+	syscall
+	
+	j askForGame
+	
+#-----------------------------------------------------------------------------------
+# startGame opens and reads from a text file, and creates a grid based on the file.
+startGame:
+	li $v0, 4
+	la $a0, loadingMessage
+	syscall			# print loading message.
+	
+# pick a random letter file and select it to use in the game.
+# do this by generating a random number, adding 65 to it to assign it to a letter,
+# and make that letter the name of a file.
+pickRandomFile:
+	li $a1, 25		# values 0-25 will be randomly selected, for each letter of the alphabet
+	li $v0, 42		# command to pick a random number and store in in $a0
+	syscall
+	addi $a0, $a0, 65 	# $a0 now has the ascii code of a letter.
+	la $t1, fileName	# load the address of fileName
+	sb $a0, ($t1) 	        # store the ascii value of a letter into position 0 in filename
+
+# important: the letter files must be saved in the same directory as MARS and the project file.
+loadFile:
+	li $v0, 13		# command: open file
+	la $a0, fileName	# load the address of filename into $a0
+	li $a1, 0
+	li $a2, 0		# flag
+	syscall
+	blt $v0, $zero, error	# check if the file descriptor is negative
+	move $s6, $v0 		# save file descriptor into $s6
+	
+	li $v0, 14		# command for reading a file
+	move $a0, $s6		# move file descriptor into $a0
+	la $a1, fileBuffer 	# load address of file buffer into which to read
+	li $a2, 700000 		# read a maximum of 500,000 characters
+	syscall
+	
+	move $s5, $v0 		# $s5 has the actual number of characters read
+	
+	li $v0, 16 	        # command for close file
+	syscall
+	
+#--------- this part of the code takes the first nine letters of the file (the nine-letter word) ---------------------
+#--------- and stores those letters into the matrix, which is then printed to the screen.        ---------------------
+
+	li $a0, 0			# load 0 into $a0 (lower bound)
+	move $a1, $s5			# load the max number of characters read into $a1 from $s5 (upper bound)
+	li $v0, 42			# $a0 will hold a random value between 0 and the maximum number of characters read.
+	syscall
+	
+		
+	addi $sp, $sp, -4	        # make room on the stack
+	sw $ra, 0($sp)			# store the return address
+	jal firstWord			# jump and link to firstWord to find the first word (random word jumped to)
+	lw $ra, 0($sp)			# load return address
+	addi $sp, $sp, 4		# restore stack
+	
+	# $v0 has the position of the first word
+	
+	
+	addi $sp, $sp, -4	        # make room on the stack
+	sw $ra, 0($sp)			# store the return address
+	jal nineLetterWord		# jump and link to nineLetterWord to find the nine letter word
+	lw $ra, 0($sp)			# load return address
+	addi $sp, $sp, 4		# restore stack
+	
+	# $v0 has the position of the nine letter word
+	
+	
+	#---------------------------- create grid ----------------------------#
+	move $s0, $v0				# move the index of the nine letter word to $s0 (for grid printing)
+	
+	li $s1, 3				# index
+	lb $a0, fileBuffer($s0)			# load the character into $a0
+	sb $a0, grid1.3($s1)			# store the character into the middle of the grid string
+	addi $s0, $s0, 1			# increment the index in fileBuffer
+	
+	lb $a0, fileBuffer($s0)			# load the character into $a0
+	sb $a0, grid2.2($s1)			# store the character into the middle of the grid string
+	addi $s0, $s0, 1			# increment the index in fileBuffer
+	
+	li $s1, 4
+	lb $a0, fileBuffer($s0)			# load the character into $a0
+	sb $a0, grid2.1($s1)			# store the character into the middle of the grid string
+	addi $s0, $s0, 1			# increment the index in fileBuffer
+	
+	li $s1, 3
+	lb $a0, fileBuffer($s0)			# load the character into $a0
+	sb $a0, grid2.3($s1)			# store the character into the middle of the grid string
+	addi $s0, $s0, 1			# increment the index in fileBuffer
+	
+	li $s1, 3
+	lb $a0, fileBuffer($s0)			# load the character into $a0
+	sb $a0, grid1.1($s1)			# store the character into the middle of the grid string
+	addi $s0, $s0, 1			# increment the index in fileBuffer
+	
+	lb $a0, fileBuffer($s0)			# load the character into $a0
+	sb $a0, grid3.2($s1)			# store the character into the middle of the grid string
+	addi $s0, $s0, 1			# increment the index in fileBuffer
+	
+	li $s1, 4
+	lb $a0, fileBuffer($s0)			# load the character into $a0
+	sb $a0, grid3.1($s1)			# store the character into the middle of the grid string
+	addi $s0, $s0, 1			# increment the index in fileBuffer
+	
+	li $s1, 3
+	lb $a0, fileBuffer($s0)			# load the character into $a0
+	sb $a0, grid3.3($s1)			# store the character into the middle of the grid string
+	addi $s0, $s0, 1			# increment the index in fileBuffer
+	
+	lb $a0, fileBuffer($s0)			# load the character into $a0
+	sb $a0, grid1.2($s1)			# store the character into the middle of the grid string
+	addi $s0, $s0, 1			# increment the index in fileBuffer
+	
+	
+	# $v0 still has the index of the nine letter word. 
+ 	
+ 	move $t0, $v0				# move the index of the nine letter word to $t0 (for making word list)
+ 	
+ 	li $t1, 0				# use $t1 as an index for legalWords, initial value 0
+ readToLegalWords:
+
+ 	lb $a0, fileBuffer($t0)			# load the next character into $a0
+ 	beq $a0, 42, endReadToLegalWords	# if the next character is a star, branch 
+ 	sb $a0, legalWords($t1)			# store the character into legalwords at index $t1
+ 	addi $t0, $t0, 1			# increment the index of fileBuffer
+ 	addi $t1, $t1, 1			# increment the index of legalWords
+ 	j readToLegalWords			# jump back to readToLegalWords
+	
+	
+endReadToLegalWords:
+	move $t6, $t1			# store the index of legalWords
+	li $v0, 42			# load the ascii value of a star into $v0
+	addi $t1, $t1, 1		# increment the index of legalWords
+	sb $v0, legalWords($t1)		# store the star at the end of the wordList
+	li $t0, 0
+	li $v0, 11
+endPrinting: 
+	
+	# print grid
+	li $v0, 4
+	la $a0, grid1.1
+	syscall
+	
+	
+	la $a0, grid1.2
+	syscall
+	
+	
+	la $a0, grid1.3
+	syscall
+	
+	
+	la $a0, grid2.1
+	syscall
+	
+	
+	la $a0, grid2.2
+	syscall
+	
+
+	la $a0, grid2.3
+	syscall
+	
+
+	la $a0, grid3.1
+	syscall
+	
+
+	la $a0, grid3.2
+	syscall
+	
+
+	la $a0, grid3.3
+	syscall
+	
+	la $a0, promptString
+	syscall
+	
+	li $s6, 0 			# s6 is the point counter
+	li $t3, 0			# index for correctWords
+	
+	j initiateElapsedTime
+	j validate			# jump to validate
+	
+	
+	
+
+	
+	
+firstWord:
+	lb $t0, fileBuffer($a0)			# here, $a0 holds a random position in the file buffer.
+	beq $t0, 10, beginningOfFirstWord	# if a newline character is found, branch
+	addi $a0, $a0, 1			# increment $a0
+	j firstWord				# jump back to firstWord to keep searching
+	
+beginningOfFirstWord: 
+	addi $a0, $a0, 1 			# add 1 to $a0, because the beginning of the first word will be one character after the newline
+	move $v0, $a0				# set $v0 to the position of the first word
+	jr $ra					# return to where firstWord was called
+	
+nineLetterWord:
+	beq $v0, 9, foundNineLetterWord	        # if the nine letter word has been found, $v0 will be set to 10 from $a2, in lengthEnd.
+	j getLength				# jump to getLength, find the length of the word
+	
+foundNineLetterWord: 
+	add $a0, $a0, -10 			# set $a0 (current character) to just before the nine letter word
+	move $v0, $a0				# move the position of the beginning of the nine letter word to $v0
+	jr $ra					# return to where nineLetterWord was called from 
+	
+
+# if this loop lasts ten iterations without jumping to nineLetterWord, then a nine letter word has been found.
+getLength: 
+	li $a2, 0 			# $a2 holds the word length
+	ble $a0, $s5, lengthStart	# if the position in the file is not at the end of the file, branch to lengthStart
+	j resetFile			# if the position in the file is at the end of the file, jump to endOfFileError
+	
+lengthStart:
+	lb $a1, fileBuffer($a0) 	# load a character into $a1, starting at the position of the first word ($a0)
+	beq $a1, 10, lengthEnd		# if the character is a newline, branch to lengthEnd, which will increment the character and then jump back to nineletterword
+	beq $a1, 0, lengthEnd		# also branch back if the character is a null character, meaning that the index is out of bounds
+	addi $a0, $a0, 1 		# increment $a0, move forward one character
+	addi $a2, $a2, 1 		# add one to the length of the word
+	j lengthStart
+	
+lengthEnd:
+	addi $a0, $a0, 1		# increment $a0, move past the newline character to keep searching
+	move $v0, $a2			# move the word length to $v0
+	j nineLetterWord		# jump to nineLetterWord to compare the length of the word
+	
+	
+
+
+
+	
+
+
+	
+#---------------------get input from user and validate. Store valid and invalid words. Track time.-----------------#
+createCorrectArray:
+
+	sb $s7, correctArray($t9)		# s7's character is stored in correctArray at index $t9
+	addi $t9, $t9, 1			# increment counter for correctArray
+	addi $t8, $t8, 1			# increment counter for wordEntered
+	j isValid				# jump to isValid
+
+getStartTime:
+	li $v0, 30		#gets current system time in milliseconds and returns in $a0
+	syscall
+
+	move $s0, $a0		#moves returned value to storage register $s0
+	divu $s0, $s0, 1000	#converts to seconds
+	
+	jr $ra			#jumps back to where function was called
+	
+getEndTime:
+	
+	li $v0, 30		#gets current system time in milliseconds and returns in $a0
+	syscall
+	
+	move $s1, $a0		#moves returned value to storage register $s1
+	divu $s1, $s1, 1000	#convert to seconds
+	
+	subu $s2, $s1, $s0	#subtracts start time from end time and stores that into register $s2
+	
+	subu $s4, $s4, $s2	#calculating my new remaining time
+	ble $s4, $0, timeTracker	#if time elapsed($s2) is greater than or equal to the start time($s4), branch to timeTracker
+	
+	jr $ra			#jumps back to function where called
+	
+timeTracker:
+	li $v1, 4		#system call to print a string
+	la $a0, timeIsUp	#display message for timeIsUp
+	syscall
+	
+	j printScore		#jump to print score for the end of the current game
+
+initiateElapsedTime:
+	li $s2, 0			#initialize elapsed time
+	li $s4, 60			#initialize time remaining
+	la $s7, correctArray		#loading my address of correctArray
+
+validate:
+
+	jal getStartTime	# starts timer directly before user input
+
+
+	li $v0, 8		# read in a string
+	la $a0, wordEntered	# the word will be stored into wordsEntered
+	li $a1, 12		# read in a maximum of 12 characters
+	syscall
+	
+	jal getEndTime		#ends times directly after user input
+	
+	li $a1, 0		# $a1 will be the counter for the user entered word
+	li $a2, 0		# $a2 will be the counter for the words in the wordlist
+	li $a3, 0		# $a3 will be the counter for the correctArray (for duplicates)
+	
+duplicate:
+	lb $t0, wordEntered($a1)	# load a character of the user's word into $t0
+	lb $t1, correctArray($a3)	# load a character of the correctArray into $t1
+	lb $t4, zeroExitString($zero) 	# load the zero character into $t4 to check for exit
+	beq $t1, 0, resetValuesFromDuplicate		# if the character at $a3 is null, the word is not a duplicate.
+	beq $t0, $t4, printScore	# if the user enters a zero, branch to printscore
+	bne $t0, $t1, duplicateNextWord		# next, check if the two characters are not equal
+	beq $t1, 32, duplicateTest		# if $t0 is a space, branch to ascertain if $t1 is a space
+	
+duplicateCounters:
+	addi $a1, $a1, 1		# increment counter for user word
+	addi $a3, $a3, 1		# increment counter for correctArray
+	j duplicate
+	
+duplicateNextWord:
+	lb $t1, correctArray($a3) 	# $t1 has the character of the wordlist at index $a2
+	beq $t1, 32, duplicateIncrementIndex	# branch to duplicateIncrementIndex when the character at $a3 is a space
+	beq $t1, 0, compare		# if the character at $a3 is null, the word is not a duplicate.
+	addi $a3, $a3, 1		# add one to $a2, keep searching for a newline character
+	j duplicateNextWord		# jump to notEqual and keep searching
+	
+duplicateIncrementIndex:
+	addi $a3, $a3, 1		# add one to $a3, start comparing at the beginning of the next word
+	li $a1, 0			# reset the counter for the user's word
+	j duplicate
+	
+duplicateTest:
+	beq $t0, 10, duplicateWordEntered
+	j duplicateCounters
+	
+	
+duplicateWordEntered:
+	li $v0, 4
+	la $a0, youEnteredADuplicateWord
+	syscall
+	
+	la $a0, promptString
+	syscall
+	
+	j validate
+	
+resetValuesFromDuplicate:
+	li $a1, 0
+	li $a2, 0
+
+compare:	
+	lb $t0, wordEntered($a1)	# load a character of the user's word into $t0
+	lb $t1, legalWords($a2)		# load a character of the wordlist into $t1
+	lb $t4, zeroExitString($zero) 	# load the zero character into $t4 to check for exit
+	beq $t0, $t4, printScore	# if the user enters a zero, branch to printscore
+	bne $t0, $t1, notEqual		# next, check if the two characters are not equal
+	beq $t0, 10, validTest		# if $t0 is a newline, branch to ascertain if $t1 is also a newline
+counters:
+	addi $a1, $a1, 1		# increment the user word counter
+	addi $a2, $a2, 1		# increment the wordlist counter
+	
+	j compare			# keep comparing	
+	
+notEqual:
+	lb $t1, legalWords($a2) 	# $t1 has the character of the wordlist at index $a2
+	beq $t1, 10, incrementIndex	# branch to incrementIndex when the character at $a2 is a newline
+	beq $t1, 42, invalid		# if the character at $a2 is a star, the word is invalid.
+	addi $a2, $a2, 1		# add one to $a2, keep searching for a newline character
+	j notEqual			# jump to notEqual and keep searching
+	
+incrementIndex:
+	addi $a2, $a2, 2		# add one to $a2, start comparing at the beginning of the next word
+	li $a1, 0			# reset the counter for the user's word
+	j compare			# jump back to compare
+	
+invalid:
+	li $v0, 4
+	la $a0, invalidWord		# print that the word is invalid
+	syscall		
+	
+	li $v0, 4
+	la $a0, countdownDisplay	#displays "Your remaining time is:"
+	syscall
+	
+	li $v0, 1
+	move $a0, $s4			#displays the actual seconds left
+	syscall
+	
+	li $v0, 4						
+	la $a0, promptString		# ask the user to enter a word
+	syscall
+	
+	j validate			# jump back to validate
+	
+validTest:
+	beq $t1, 10, isValid		# if both $t0 and $t1 are newlines at this point, then the word is valid
+	j counters			# else, jump back to counters and proceed normally
+isValid:
+	
+	lb $s7, wordEntered($t8)	# load byte from $t8
+	bne $s7, $0, createCorrectArray	# When correct word is entered, jump to createCorrectArray
+	
+isValidContinued:
+ 	addi $t9, $t9, -1
+	li $s7, ' '			# load a space into $s7
+	sb $s7, correctArray($t9) 	# store a space at the end of each word
+	addi $t9, $t9, 1		# increment counter for correctArray so as not to overwrite space on next run
+	li $t8, 0 			# reset counter for wordEntered (reading to correctArray)
+	
+
+	li $v0, 4		
+	la $a0, validWord		# print that the word is valid
+	syscall
+	
+	li $v0, 4
+	la $a0, countdownDisplay	#displays "Your remaining time is:"
+	syscall
+	
+	addi $s4, $s4, 5		#Add 5 seconds for correct answer
+	
+	li $v0, 1
+	move $a0, $s4			#displays the actual seconds left
+	syscall
+	
+	li $v0, 4
+	la $a0, promptString		# ask the user to enter a word
+	syscall	
+		
+	addi $s6, $s6, 1		# add a point
+	li $t0, 0			# index for reading in the word to correct words
+
+	j validate			# jump back to validate
+	
+printScore:
+	
+	li $v0, 4		# print string
+	la $a0, pointsEarned	# print the points earned
+	syscall
+	
+	li $v0, 1		# print integer
+	move $a0, $s6		# move the points to $a0 for printing
+	syscall
+	
+	li $v0, 4
+	la $a0, allCorrectWords
+	syscall
+	
+printCorrectWords:
+	li $t0, 0			# index for printing
+	li $v0, 11			# print character
+printCorrectWordsLoop:
+	beq $t0, $t9, printLegalWords	# if the print index equals the index at the end of the correct words, branch
+	lb $a0, correctArray($t0)	# load character at index $t0
+	syscall				# print character at index $t0
+	addi $t0, $t0, 1		# increment the print index
+	j printCorrectWordsLoop		# jump back to the loop
+
+	
+printLegalWords:
+	li $v0, 4
+	la $a0, allPossibleWords
+	syscall
+	li $t0, 0
+	li $v0, 11
+printLegalWordsLoop:
+	beq $t0, $t6, back
+	lb $a0, legalWords($t0)
+	syscall
+	addi $t0, $t0, 1
+	j printLegalWordsLoop
+back:
+	li $v0, 4
+	j askForGame
+	
+# branch here if there was an error opening the file.
+error: 
+	li $v0, 4
+	la $a0, errorString 		# print error message
+	syscall
+	li $v0, 10			# exit the program
+	syscall
+	
+resetFile: 
+
+	li $a0, 0				        # reset a0 to 0
+	j lengthStart					# jump back to original place
+
